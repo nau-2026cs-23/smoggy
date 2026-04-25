@@ -75,7 +75,7 @@ export const tickets = pgTable('Tickets', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const insertTicketSchema = createInsertSchema(tickets, {
+export const insertTicketSchema = z.object({
   building: z.string().min(1, 'Building is required'),
   room: z.string().min(1, 'Room is required'),
   faultType: z.enum(['electric', 'plumbing', 'door', 'other']),
