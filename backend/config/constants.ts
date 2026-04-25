@@ -1,3 +1,8 @@
+export const APP_CONFIG = {
+  VERSION: '1.0.0',
+  APP_NAME: 'Repair Ticket System',
+} as const;
+
 export const SERVER_CONFIG = {
   PORT: process.env.PORT || 3000,
   NODE_ENV: process.env.NODE_ENV || 'development',
