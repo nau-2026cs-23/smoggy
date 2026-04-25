@@ -594,16 +594,32 @@ const Index = () => {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [stats, setStats] = useState({ total: 0, completed: 0, pending: 0, inProgress: 0, completionRate: 96, avgRating: 4.6 });
-  const [userInfo] = useState<{ name: string; role: string } | null>(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return { name: payload.name || payload.email || '用户', role: payload.role || 'student' };
-      } catch { /* ignore */ }
-    }
-    return null;
-  });
+  const [userInfo, setUserInfo] = useState<{ name: string; role: string } | null>(null);
+
+  // Update user info when token changes
+  useEffect(() => {
+    const updateUserInfo = () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          setUserInfo({ 
+            name: payload.name || payload.email || '用户', 
+            role: payload.role || 'student' 
+          });
+        } catch { /* ignore */ }
+      } else {
+        setUserInfo(null);
+      }
+    };
+    
+    updateUserInfo();
+    
+    // Listen for storage changes (e.g., when token is set/removed)
+    window.addEventListener('storage', updateUserInfo);
+    
+    return () => window.removeEventListener('storage', updateUserInfo);
+  }, []);
 
   const fetchTickets = useCallback(async () => {
     setLoadingTickets(true);

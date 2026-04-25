@@ -1,17 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ticketRepository, reviewRepository } from '../repositories/tickets';
 import { userRepository } from '../repositories/users';
-import { insertTicketSchema, insertReviewSchema, updateTicketSchema } from '../db/schema';
+import { insertTicketSchema } from '../db/schema';
 import { authenticateJWT, AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
-// ============================================
-// STUDENT ROUTES
-// ============================================
-
-// Submit a new repair ticket
 router.post('/', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as AuthRequest).user!;
@@ -23,34 +18,20 @@ router.post('/', authenticateJWT, async (req: Request, res: Response, next: Next
   }
 });
 
-// Get my tickets (student)
-router.get('/my', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/available', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as AuthRequest).user!;
-    const myTickets = await ticketRepository.findByStudentId(user.id);
-    res.json({ success: true, data: myTickets });
+    if (user.role !== 'worker') {
+      throw new AppError('Only workers can view available tickets', 403);
+    }
+    const allTickets = await ticketRepository.findAll();
+    const availableTickets = allTickets.filter(t => t.status === 'pending');
+    res.json({ success: true, data: availableTickets });
   } catch (error) {
     next(error);
   }
 });
 
-// Get single ticket
-router.get('/:id', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = req.params.id as string;
-    const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new AppError('Ticket not found', 404);
-    res.json({ success: true, data: ticket });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ============================================
-// WORKER ROUTES
-// ============================================
-
-// Get tickets assigned to worker
 router.get('/worker/assigned', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as AuthRequest).user!;
@@ -61,7 +42,6 @@ router.get('/worker/assigned', authenticateJWT, async (req: Request, res: Respon
   }
 });
 
-// Worker updates ticket status/note
 router.patch('/:id/status', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
@@ -74,21 +54,6 @@ router.patch('/:id/status', authenticateJWT, async (req: Request, res: Response,
   }
 });
 
-// ============================================
-// ADMIN ROUTES
-// ============================================
-
-// Get all tickets (admin)
-router.get('/', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const allTickets = await ticketRepository.findAllWithUsers();
-    res.json({ success: true, data: allTickets });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Assign worker to ticket (admin)
 router.patch('/:id/assign', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
@@ -102,12 +67,46 @@ router.patch('/:id/assign', authenticateJWT, async (req: Request, res: Response,
   }
 });
 
-// Get stats
 router.get('/stats/summary', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const stats = await ticketRepository.getStats();
     const avgRating = await reviewRepository.getAverageRating();
     res.json({ success: true, data: { ...stats, avgRating } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/my', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = (req as AuthRequest).user!;
+    const myTickets = await ticketRepository.findByStudentId(user.id);
+    res.json({ success: true, data: myTickets });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) throw new AppError('Ticket not found', 404);
+    res.json({ success: true, data: ticket });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = (req as AuthRequest).user!;
+    if (user.role === 'admin') {
+      const allTickets = await ticketRepository.findAllWithUsers();
+      return res.json({ success: true, data: allTickets });
+    }
+    const myTickets = await ticketRepository.findByStudentId(user.id);
+    res.json({ success: true, data: myTickets });
   } catch (error) {
     next(error);
   }

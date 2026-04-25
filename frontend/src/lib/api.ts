@@ -9,9 +9,6 @@ const getAuthHeaders = () => {
   };
 };
 
-// ============================================
-// Auth
-// ============================================
 export const authApi = {
   async login(email: string, password: string): Promise<ApiResponse<{ token: string; user: User }>> {
     const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -22,11 +19,11 @@ export const authApi = {
     return res.json() as Promise<ApiResponse<{ token: string; user: User }>>;
   },
 
-  async signup(name: string, email: string, password: string, confirmPassword: string): Promise<ApiResponse<{ token: string; user: User }>> {
+  async signup(name: string, email: string, password: string, confirmPassword: string, role: string = 'student'): Promise<ApiResponse<{ token: string; user: User }>> {
     const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, confirmPassword }),
+      body: JSON.stringify({ name, email, password, confirmPassword, role }),
     });
     return res.json() as Promise<ApiResponse<{ token: string; user: User }>>;
   },
@@ -39,9 +36,6 @@ export const authApi = {
   },
 };
 
-// ============================================
-// Tickets
-// ============================================
 export const ticketsApi = {
   async create(data: {
     building: string;
@@ -80,6 +74,13 @@ export const ticketsApi = {
     return res.json() as Promise<ApiResponse<Ticket[]>>;
   },
 
+  async getAvailable(): Promise<ApiResponse<Ticket[]>> {
+    const res = await fetch(`${API_BASE_URL}/api/tickets/available`, {
+      headers: getAuthHeaders(),
+    });
+    return res.json() as Promise<ApiResponse<Ticket[]>>;
+  },
+
   async getWorkerTickets(): Promise<ApiResponse<Ticket[]>> {
     const res = await fetch(`${API_BASE_URL}/api/tickets/worker/assigned`, {
       headers: getAuthHeaders(),
@@ -113,9 +114,6 @@ export const ticketsApi = {
   },
 };
 
-// ============================================
-// Reviews
-// ============================================
 export const reviewsApi = {
   async create(data: {
     ticketId: string;
@@ -153,14 +151,28 @@ export const reviewsApi = {
   },
 };
 
-// ============================================
-// Workers
-// ============================================
 export const workersApi = {
   async getAll(): Promise<ApiResponse<User[]>> {
     const res = await fetch(`${API_BASE_URL}/api/workers`, {
       headers: getAuthHeaders(),
     });
     return res.json() as Promise<ApiResponse<User[]>>;
+  },
+
+  async claimTicket(ticketId: string): Promise<ApiResponse<Ticket>> {
+    const res = await fetch(`${API_BASE_URL}/api/workers/claim/${ticketId}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return res.json() as Promise<ApiResponse<Ticket>>;
+  },
+
+  async updateUserRole(userId: string, role: string): Promise<ApiResponse<User>> {
+    const res = await fetch(`${API_BASE_URL}/api/workers/${userId}/role`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role }),
+    });
+    return res.json() as Promise<ApiResponse<User>>;
   },
 };

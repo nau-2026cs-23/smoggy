@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ticketsApi, reviewsApi } from '../../lib/api';
+import { ticketsApi, workersApi, reviewsApi } from '../../lib/api';
 import { toast } from 'sonner';
 import type { Ticket, Review } from '../../types';
 import {
   ClipboardList, Star, CheckCircle2, Clock, Wrench,
-  ChevronDown, Loader2, ArrowLeft
+  ChevronDown, Loader2, ArrowLeft, HandMetal
 } from 'lucide-react';
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
@@ -29,31 +29,40 @@ const StarRating = ({ value }: { value: number }) => (
   </div>
 );
 
-type WorkerTab = 'tasks' | 'reviews';
+type WorkerTab = 'available' | 'tasks' | 'reviews';
 
 const WorkerView = () => {
-  const [tab, setTab] = useState<WorkerTab>('tasks');
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tab, setTab] = useState<WorkerTab>('available');
+  const [availableTickets, setAvailableTickets] = useState<Ticket[]>([]);
+  const [assignedTickets, setAssignedTickets] = useState<Ticket[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [newStatus, setNewStatus] = useState('');
   const [workerNote, setWorkerNote] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [claiming, setClaiming] = useState<string | null>(null);
   const [workerStats, setWorkerStats] = useState({ avgRating: 0, totalReviews: 0 });
 
-  const fetchTickets = useCallback(async () => {
+  const fetchAvailableTickets = useCallback(async () => {
     setLoading(true);
     try {
+      const res = await ticketsApi.getAvailable();
+      if (res.success) setAvailableTickets(res.data);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  const fetchAssignedTickets = useCallback(async () => {
+    try {
       const res = await ticketsApi.getWorkerTickets();
-      if (res.success) setTickets(res.data);
+      if (res.success) setAssignedTickets(res.data);
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
   const fetchReviews = useCallback(async () => {
     try {
-      // Get user id from token
       const token = localStorage.getItem('token');
       if (!token) return;
       const payload = JSON.parse(atob(token.split('.')[1]));
@@ -67,12 +76,33 @@ const WorkerView = () => {
   }, []);
 
   useEffect(() => {
-    fetchTickets();
-  }, [fetchTickets]);
+    if (tab === 'available') {
+      fetchAvailableTickets();
+    } else if (tab === 'tasks') {
+      fetchAssignedTickets();
+    } else if (tab === 'reviews') {
+      fetchReviews();
+    }
+  }, [tab, fetchAvailableTickets, fetchAssignedTickets, fetchReviews]);
 
-  useEffect(() => {
-    if (tab === 'reviews') fetchReviews();
-  }, [tab, fetchReviews]);
+  const handleClaimTicket = async (ticketId: string) => {
+    setClaiming(ticketId);
+    try {
+      const res = await workersApi.claimTicket(ticketId);
+      if (res.success) {
+        toast.success('接单成功！');
+        fetchAvailableTickets();
+        fetchAssignedTickets();
+        setTab('tasks');
+      } else {
+        toast.error('接单失败', { description: res.message });
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setClaiming(null);
+    }
+  };
 
   const handleUpdateStatus = async () => {
     if (!selectedTicket || !newStatus) return;
@@ -84,7 +114,7 @@ const WorkerView = () => {
         setSelectedTicket(null);
         setNewStatus('');
         setWorkerNote('');
-        fetchTickets();
+        fetchAssignedTickets();
       } else {
         toast.error('更新失败', { description: res.message });
       }
@@ -95,20 +125,18 @@ const WorkerView = () => {
     }
   };
 
-  const pendingCount = tickets.filter(t => t.status === 'assigned' || t.status === 'pending').length;
-  const inProgressCount = tickets.filter(t => t.status === 'in_progress').length;
-  const completedCount = tickets.filter(t => t.status === 'completed').length;
+  const pendingCount = assignedTickets.filter(t => t.status === 'assigned').length;
+  const inProgressCount = assignedTickets.filter(t => t.status === 'in_progress').length;
+  const completedCount = assignedTickets.filter(t => t.status === 'completed').length;
 
   return (
     <div className="min-h-screen bg-[#F0F4F8]">
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="font-[system-ui] text-2xl font-bold text-[#1A202C] mb-1">维修工作台</h1>
           <p className="text-[#64748B] text-sm">管理您的维修任务和查看客户评价</p>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           {[
             { label: '待处理', value: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50' },
@@ -122,9 +150,9 @@ const WorkerView = () => {
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 bg-white rounded-xl border border-[#CBD5E1] p-1 mb-6 w-fit">
           {([
+            { key: 'available', label: '可接单', icon: <HandMetal className="w-4 h-4" /> },
             { key: 'tasks', label: '我的任务', icon: <Wrench className="w-4 h-4" /> },
             { key: 'reviews', label: '我的评价', icon: <Star className="w-4 h-4" /> },
           ] as { key: WorkerTab; label: string; icon: React.ReactNode }[]).map(t => (
@@ -141,7 +169,56 @@ const WorkerView = () => {
           ))}
         </div>
 
-        {/* Tasks Tab */}
+        {tab === 'available' && (
+          <div>
+            {loading ? (
+              <div className="text-center py-12 text-[#64748B]">加载中...</div>
+            ) : availableTickets.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-2xl border border-[#CBD5E1]">
+                <ClipboardList className="w-12 h-12 mx-auto mb-3 text-[#CBD5E1]" />
+                <p className="text-[#64748B]">暂无可接单的维修任务</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {availableTickets.map(ticket => {
+                  const st = STATUS_MAP[ticket.status] || STATUS_MAP.pending;
+                  return (
+                    <div key={ticket.id} className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm p-5">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <span className="text-xs font-mono text-[#64748B] bg-[#F0F4F8] px-2 py-0.5 rounded">{ticket.ticketNo}</span>
+                            <span className={`inline-flex items-center gap-1 ${st.bg} ${st.color} text-xs font-semibold px-2.5 py-0.5 rounded-full`}>
+                              {st.label}
+                            </span>
+                            <span className="text-xs bg-[#F0F4F8] text-[#64748B] px-2 py-0.5 rounded">{FAULT_LABELS[ticket.faultType] || ticket.faultType}</span>
+                          </div>
+                          <h3 className="font-semibold text-[#1A202C] mb-1">{ticket.building}号楼 {ticket.room}室</h3>
+                          <p className="text-sm text-[#64748B] line-clamp-2 mb-2">{ticket.description}</p>
+                          <div className="flex flex-wrap gap-3 text-xs text-[#64748B]">
+                            <span>学生：{ticket.student?.name || '未知'}</span>
+                            <span>提交：{new Date(ticket.createdAt).toLocaleDateString('zh-CN')}</span>
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <button
+                            onClick={() => handleClaimTicket(ticket.id)}
+                            disabled={claiming === ticket.id}
+                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 min-h-[36px]"
+                          >
+                            {claiming === ticket.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HandMetal className="w-3.5 h-3.5" />}
+                            接单
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === 'tasks' && (
           <div>
             {selectedTicket ? (
@@ -169,6 +246,11 @@ const WorkerView = () => {
                   <p className="text-[#64748B] leading-relaxed mb-4">{selectedTicket.description}</p>
                   {selectedTicket.contact && (
                     <p className="text-sm text-[#64748B]">联系方式：{selectedTicket.contact}</p>
+                  )}
+                  {selectedTicket.workerNote && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-800">维修备注：{selectedTicket.workerNote}</p>
+                    </div>
                   )}
                 </div>
 
@@ -213,14 +295,14 @@ const WorkerView = () => {
               <div>
                 {loading ? (
                   <div className="text-center py-12 text-[#64748B]">加载中...</div>
-                ) : tickets.length === 0 ? (
+                ) : assignedTickets.length === 0 ? (
                   <div className="text-center py-16 bg-white rounded-2xl border border-[#CBD5E1]">
                     <Wrench className="w-12 h-12 mx-auto mb-3 text-[#CBD5E1]" />
                     <p className="text-[#64748B]">暂无分配的维修任务</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {tickets.map(ticket => {
+                    {assignedTickets.map(ticket => {
                       const st = STATUS_MAP[ticket.status] || STATUS_MAP.pending;
                       return (
                         <div
@@ -254,7 +336,6 @@ const WorkerView = () => {
           </div>
         )}
 
-        {/* Reviews Tab */}
         {tab === 'reviews' && (
           <div>
             <div className="flex items-center gap-4 mb-6">

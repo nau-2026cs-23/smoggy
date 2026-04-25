@@ -4,18 +4,14 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
-// Use Zod-inferred type for repository inputs so routes can pass
-// `insertUserSchema.parse(...)` directly without type mismatches.
 type CreateUserInput = z.infer<typeof insertUserSchema>;
 
 export class UserRepository {
   async create(userData: CreateUserInput) {
-    // Hash password before storing
     const hashedPassword = await bcrypt.hash(userData.password, 10);
 
     const [user] = await db
       .insert(users)
-      // Drizzle expects InsertUser; we trust Zod validation and assert here.
       .values({
         ...userData,
         password: hashedPassword,
@@ -27,7 +23,11 @@ export class UserRepository {
 
   async findByEmail(email: string) {
     const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
 
+  async findById(id: string) {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
@@ -35,8 +35,22 @@ export class UserRepository {
     return await db.select().from(users);
   }
 
+  async findByRole(role: string) {
+    return await db.select().from(users).where(eq(users.role, role as any));
+  }
+
+  async updateRole(id: string, role: string) {
+    const [user] = await db
+      .update(users)
+      .set({ role: role as any, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
   async verifyPassword(plainPassword: string, hashedPassword: string) {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 }
+
 export const userRepository = new UserRepository();

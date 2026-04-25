@@ -40,7 +40,7 @@ const Signup = () => {
     }
     setLoading(true);
     try {
-      const data = await authApi.signup(name, email, password, confirmPassword);
+      const data = await authApi.signup(name, email, password, confirmPassword, role);
       if (data.success && data.data?.token) {
         login(data.data.token);
         toast.success('注册成功', { description: `欢迎加入，${name}！` });
