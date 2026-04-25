@@ -29,7 +29,6 @@ export const errorHandler = (
     return;
   }
 
-  // Handle Zod validation errors
   if (err instanceof ZodError) {
     res.status(400).json({
       success: false,
@@ -42,7 +41,6 @@ export const errorHandler = (
     return;
   }
 
-  // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
     res.status(401).json({
       success: false,
@@ -54,7 +52,6 @@ export const errorHandler = (
     return;
   }
 
-  // Handle unexpected errors
   console.error('Unexpected error:', err);
   res.status(500).json({
     success: false,
@@ -63,4 +60,4 @@ export const errorHandler = (
       message: 'An unexpected error occurred'
     }
   });
-}; 
+};
