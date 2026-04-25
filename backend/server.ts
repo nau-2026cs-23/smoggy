@@ -13,15 +13,9 @@ import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 
-/**
- * Body Parsers
- */
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-/**
- * Static Files
- */
 const REACT_BUILD_FOLDER = path.join(__dirname, '..', 'frontend', 'dist');
 app.use(
   express.static(REACT_BUILD_FOLDER, {
@@ -48,30 +42,18 @@ app.use(
   })
 );
 
-/**
- * API Routes
- */
 app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/workers', workerRoutes);
 
-/**
- * SPA Fallback Route
- */
 app.get('*', (_req, res) => {
   res.sendFile(path.join(REACT_BUILD_FOLDER, 'index.html'));
 });
 
-/**
- * Error Handler
- */
 app.use(errorHandler as ErrorRequestHandler);
 
-/**
- * Start Server
- */
 app.listen(SERVER_CONFIG.PORT, () => {
   console.log(`Server ready on port ${SERVER_CONFIG.PORT}`);
 });
